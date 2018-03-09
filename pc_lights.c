@@ -1,17 +1,15 @@
 #include <msp430g2553.h>
 
-#define LED1 0x01
-#define LED2 0x02
-#define LED3 0x04
-#define LED4 0x10
-#define LED5 0x20
-#define BTN 0x08
-
-//Parameters
-#define SECONDS_TO_ADVANCE 3600 //3600 for one hour
+#define red_led 0x01
+#define green_led 0x40
 
 volatile unsigned int i = 0;
 volatile unsigned int color_input;
+struct rgb {
+	unsigned int red;
+	unsigned int green;
+	unsigned int blue;
+};
 
 void main(void) {
 	WDTCTL = WDTPW + WDTHOLD;
@@ -22,58 +20,70 @@ void main(void) {
 	//BCSCTL3 |= XCAP_3; //Capacitance for watch crystal
 
 	// Output setup
-	P1DIR = 0x41;  //1.6 and 1.0
+	P1DIR = red_led + green_led;
+	P1OUT = 0;
 
 	// GIE
 	_enable_interrupts();
 
 	// long tick to change brightness for demo
-	TA0CCR0 = 512;//a large number
-	TA0CTL = TASSEL_1 + MC_1 + TACLR + TAIE;
+	//TA0CCR0 = 65535;//a large number
+	TA0CTL = TASSEL_2 + MC_2 + TACLR + TAIE;
 
 	// Timer for PWM
-	TA1CCR0 = 256;// smaller
-	TA1CTL = TASSEL_1 + MC_1 + TACLR + TAIE;
+	TA1CCR0 = 256;
+	TA1CCTL0 = CCIE; // Use this interrupt for priority reasons
+	TA1CTL = TASSEL_2 + MC_1 + TACLR + ID_3;
 	TA1CCTL1 = CCIE;
 	TA1CCR1 = 0;
 	TA1CCTL2 = CCIE;
 	TA1CCR2 = 256;
 
+	TA1CCR1 = 0;
+	TA1CCR2 = (256 - color_input);
 	// Main display loop
 	while (1){
-		if (color_input < 256){
-			TA1CCR1 = color_input;
-			TA1CCR2 = 256 - color_input;
-		}
-		else if (color_input < 512){
-			TA1CCR1 = 512 - color_input;
-			TA1CCR2 = color_input - 256;
-		}
+//		if (color_input < 256){
+///			TA1CCR1 = color_input;
+//			TA1CCR2 = 256 - color_input;
+//		}
+//		else if (color_input < 512){
+//			TA1CCR1 = 512 - color_input;
+//			TA1CCR2 = color_input - 256;
+//		}
 		LPM0;
 	}
 }
 
 // long Timer
-void __attribute__ ((interrupt(TIMER0_A1_VECTOR))) delay_isr(void){
+void __attribute__ ((interrupt(TIMER0_A1_VECTOR))) inc_isr(void){
 	if (TA0IV == 0x0A){
-		if (color_input < 512) color_input++;
-		else color_input = 0;
 		LPM0_EXIT;
 		return;
 	}
 }
 
 // Shorter timer
-void __attribute__ ((interrupt(TIMER1_A1_VECTOR))) hour_isr(void){
-	int vector = TA1IV;
-	if (vector == 0x0A){ // TA Rollover
-		P1OUT &= ~0x41;
-	}
-	else if (vector == 0x02){//CCR1 match
-		P1OUT |= 0x01;
-	}
-	else if (vector == 0x04){//CCR2 match
-		P1OUT |= 0x40;
-	}
-	
+void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) pwm1_isr(void){
+	P1OUT |= red_led;
+	return;
 }
+void __attribute__ ((interrupt(TIMER1_A1_VECTOR))) pwm2_isr(void){
+	switch (TA1IV){
+		case 0x02: //CCR1 match
+		P1OUT &= ~red_led;
+		break;
+	
+		case 0x04: //CCR2 match
+		//P1OUT &= ~green_led;
+		break;
+
+		case 0x0A: //TA rollover, here just in case
+		break;
+
+		default:
+		break;
+	}
+	return;
+}
+

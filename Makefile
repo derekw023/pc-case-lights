@@ -7,7 +7,7 @@ DEVICE  = msp430g2553
 CC      = $(GCC_DIR)/msp430-elf-gcc
 GDB     = $(GCC_DIR)/msp430-elf-gdb
 
-CFLAGS = -I $(SUPPORT_FILE_DIRECTORY) -T $(DEVICE).ld -mmcu=$(DEVICE) -mhwmult=none -O0
+CFLAGS = -I $(SUPPORT_FILE_DIRECTORY) -T $(DEVICE).ld -mmcu=$(DEVICE) -ggdb -mhwmult=none -O0
 LFLAGS = -L $(SUPPORT_FILE_DIRECTORY)
 
 all: ${OBJECTS}
