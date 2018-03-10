@@ -46,11 +46,24 @@ void main(void) {
 
 	// Main display loop
 	while (1){
+		for (blue_out = 0; blue_out < pwm_period; blue_out++){
 		for (int i = 0; i < 16; i++){
 			LPM0;
 		}
-		if (blue_out < pwm_period) blue_out++;
-		else blue_out = 0;
+		}
+		blue_out = 0;
+		for (red_out = 0; red_out < pwm_period; red_out++){
+		for (int i = 0; i < 16; i++){
+			LPM0;
+		}
+		}
+		red_out = 0;
+		for (green_out = 0; green_out < pwm_period; green_out++){
+		for (int i = 0; i < 16; i++){
+			LPM0;
+		}
+		}
+		green_out = 0;
 	}
 }
 
