@@ -1,15 +1,18 @@
 #include <msp430g2553.h>
 
-#define red_led 0x01
-#define green_led 0x40
+#define red_led 0x02 //P2.1 (pin 9)
+#define blue_led 0x40 //P1.6 (pin 14)
+#define green_led 0x10 //P2.4 (pin 12)
+
+#define red_out TA1CCR1
+#define blue_out TA0CCR1
+#define green_out TA1CCR2
+
+#define timer_params TASSEL_2 + MC_1 + TACLR
+#define pwm_period 256
 
 volatile unsigned int i = 0;
 volatile unsigned int color_input;
-struct rgb {
-	unsigned int red;
-	unsigned int green;
-	unsigned int blue;
-};
 
 void main(void) {
 	WDTCTL = WDTPW + WDTHOLD;
@@ -19,66 +22,51 @@ void main(void) {
 	//BCSCTL2 |= SELS; // Source SMCLK from crystal
 	//BCSCTL3 |= XCAP_3; //Capacitance for watch crystal
 
-	// Output setup
-	P1DIR = red_led + green_led;
-	P1OUT = 0;
+	// P1 Setup
+	P1DIR |= blue_led;
+	P1OUT |= blue_led;
+	P1SEL |= blue_led; // TimerA0.1
+		
+	// P2 Setup
+	P2DIR |= red_led | green_led;
+	P2OUT |= red_led | green_led;
+	P2SEL |= red_led | green_led; // TimerA1.1-2
 
 	// GIE
 	_enable_interrupts();
 
 	// long tick to change brightness for demo
 	//TA0CCR0 = 65535;//a large number
-	TA0CTL = TASSEL_2 + MC_2 + TACLR + TAIE;
+	//TA0CTL = TASSEL_2 + MC_2 + TACLR + TAIE;
 
-	// Timer for PWM
-	TA1CCR0 = 256;
-	TA1CCTL0 = CCIE; // Use this interrupt for priority reasons
-	TA1CTL = TASSEL_2 + MC_1 + TACLR + ID_3;
-	TA1CCTL1 = CCIE;
-	TA1CCR1 = 0;
-	TA1CCTL2 = CCIE;
-	TA1CCR2 = 256;
+	// Timer config
+	TA0CTL = TA1CTL = TAIE + timer_params; //TAIE is included for debugging or timing
+	TA0CCTL1 = TA1CCTL1 = TA1CCTL2 = OUTMOD_7;
+	TA0CCR0 = TA1CCR0 = pwm_period;
 
-	TA1CCR1 = 0;
-	TA1CCR2 = (256 - color_input);
 	// Main display loop
 	while (1){
-//		if (color_input < 256){
-///			TA1CCR1 = color_input;
-//			TA1CCR2 = 256 - color_input;
-//		}
-//		else if (color_input < 512){
-//			TA1CCR1 = 512 - color_input;
-//			TA1CCR2 = color_input - 256;
-//		}
-		LPM0;
-	}
-}
-
-// long Timer
-void __attribute__ ((interrupt(TIMER0_A1_VECTOR))) inc_isr(void){
-	if (TA0IV == 0x0A){
-		LPM0_EXIT;
-		return;
+		for (int i = 0; i < 16; i++){
+			LPM0;
+		}
+		if (blue_out < pwm_period) blue_out++;
+		else blue_out = 0;
 	}
 }
 
 // Shorter timer
-void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) pwm1_isr(void){
-	P1OUT |= red_led;
+void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) T1A0_isr(void){
 	return;
 }
-void __attribute__ ((interrupt(TIMER1_A1_VECTOR))) pwm2_isr(void){
-	switch (TA1IV){
+void __attribute__ ((interrupt(TIMER0_A1_VECTOR))) T0A1_isr(void){
+	switch (TA0IV){
 		case 0x02: //CCR1 match
-		P1OUT &= ~red_led;
 		break;
 	
 		case 0x04: //CCR2 match
-		//P1OUT &= ~green_led;
 		break;
 
-		case 0x0A: //TA rollover, here just in case
+		case 0x0A: //TA rollover
 		break;
 
 		default:
@@ -87,3 +75,20 @@ void __attribute__ ((interrupt(TIMER1_A1_VECTOR))) pwm2_isr(void){
 	return;
 }
 
+void __attribute__ ((interrupt(TIMER1_A1_VECTOR))) T1A1_isr(void){
+	switch (TA1IV){
+		case 0x02: //CCR1 match
+		break;
+	
+		case 0x04: //CCR2 match
+		break;
+
+		case 0x0A: //TA rollover
+		LPM0_EXIT;
+		break;
+
+		default:
+		break;
+	}
+	return;
+}
